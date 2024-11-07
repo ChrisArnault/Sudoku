@@ -60,12 +60,16 @@ class SudoCase:
         same_ligne = int((self.ligne - 1)/3) == (sq_ligne - 1)
         return same_colonne and same_ligne
 
-    def add_forbidden(self, valeur):
+    def add_forbidden(self, valeur, info=""):
         if self.forbidden is None:
             self.forbidden = list()
+
+        if self.allowed is not None and valeur in self.allowed:
+            self.allowed.remove(valeur)
+
         if valeur not in self.forbidden:
             self.forbidden.append(valeur)
-            set_changed(f"add forbidden {valeur}")
+            set_changed(f"add forbidden {valeur} {info}")
             return True
         return False
 
@@ -73,7 +77,7 @@ class SudoCase:
         if self.allowed is None:
             self.allowed = list()
             for i in range(1, 10):
-                if i not in self.forbidden:
+                if self.forbidden is not None and i not in self.forbidden:
                     self.allowed.append(i)
 
     def draw(self, frame):
@@ -114,7 +118,7 @@ class SudoLine:
             t += f"{case}"
         return (f"SudoLine[{self.ligne}]=[{t}]")
 
-    def check(self, selected_case):
+    def check(self, selected_case, info=""):
         if self.ligne != selected_case.ligne:
             return
 
@@ -123,7 +127,7 @@ class SudoLine:
                 continue
             case = Grille.cases[(colonne, self.ligne)]
             if case.valeur != 0:
-                if selected_case.add_forbidden(case.valeur):
+                if selected_case.add_forbidden(case.valeur, info):
                     # print(f"Line> [{colonne}, {self.ligne}] v={case.valeur} c=[{selected_case.colonne}, {selected_case.ligne}] f=[{selected_case.forbidden}]")
                     pass
 
@@ -138,7 +142,7 @@ class SudoColonne:
             t += f"{case}"
         print(f"SudoColonne[{colonne}]=[{t}]")
 
-    def check(self, selected_case):
+    def check(self, selected_case, info=""):
         if self.colonne != selected_case.colonne:
             return
 
@@ -147,7 +151,7 @@ class SudoColonne:
                 continue
             case = Grille.cases[(self.colonne, ligne)]
             if case.valeur != 0:
-                if selected_case.add_forbidden(case.valeur):
+                if selected_case.add_forbidden(case.valeur, info):
                     # print(f"Colonne>  [{self.colonne}, {ligne}] v={case.valeur} c=[{selected_case.colonne}, {selected_case.ligne}] f=[{selected_case.forbidden}]")
                     pass
 
@@ -173,7 +177,7 @@ class SudoSquare:
                 tl += f"{case}"
             print(f"SudoSquare[{self.colonne}, {self.ligne}]=[{tl}]")
 
-    def check(self, selected_case):
+    def check(self, selected_case, info=""):
         if not selected_case.in_square(self.colonne, self.ligne):
             return
 
@@ -183,7 +187,7 @@ class SudoSquare:
                     continue
                 case = Grille.cases[(colonne, ligne)]
                 if case.valeur != 0:
-                    if selected_case.add_forbidden(case.valeur):
+                    if selected_case.add_forbidden(case.valeur, info):
                         # print(f"Square>  [{colonne}, {ligne}] v={case.valeur} c=[{selected_case.colonne}, {selected_case.ligne}]  f=[{selected_case.forbidden}]")
                         pass
 
@@ -238,9 +242,9 @@ def algo1():
 
             # print(f"-----------------[{colonne},{ligne},[{sq_colonne},{sq_ligne}]]")
 
-            SudoLine(ligne).check(selected_case)
-            SudoColonne(colonne).check(selected_case)
-            SudoSquare(sq_colonne, sq_ligne).check(selected_case)
+            SudoLine(ligne).check(selected_case, f"from [{colonne},{ligne}]")
+            SudoColonne(colonne).check(selected_case, f"from [{colonne},{ligne}]")
+            SudoSquare(sq_colonne, sq_ligne).check(selected_case, f"from [{colonne},{ligne}]")
 
     print("Algo1 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 
@@ -319,7 +323,7 @@ def algo4():
                     if selected_case.valeur != 0:
                         continue
 
-                    print(f"     algo4> case: [{col},{lig}] {selected_case.allowed}")
+                    print(f"     algo4> case: [{col},{lig}] {selected_case.allowed} {selected_case.forbidden}")
 
                     # print(f"[{colonne},{ligne}] [{col},{lig}]  {selected_case.allowed}")
                     if len(selected_case.allowed) > 0:
@@ -358,9 +362,9 @@ def algo4():
                             continue
                         allowcolonne = a[0][0]
                         allowcase = Grille.cases[(allowcolonne, allowline)]
-                        if allowcase.allowed and v in allowcase.allowed:
-                            allowcase.allowed.remove(v)
-                            set_changed(f"algo4> remove allowed {v} from colonne {allowcolonne}")
+                        if allowcase.forbidden is not None and v not in allowcase.forbidden:
+                            allowcase.add_forbidden(v)
+                            set_changed(f"algo4> add forbidden {v} from colonne {allowcolonne}")
                         pass
                     pass
                 if l_aligned:
@@ -375,9 +379,9 @@ def algo4():
                             continue
                         allowline = a[0][1]
                         allowcase = Grille.cases[(allowcolonne, allowline)]
-                        if allowcase.allowed and v in allowcase.allowed:
-                            allowcase.allowed.remove(v)
-                            set_changed(f"algo4> remove allowed {v} from ligne {allowline}")
+                        if allowcase.forbidden is not None and v not in allowcase.forbidden:
+                            allowcase.add_forbidden(v)
+                            set_changed(f"algo4> add forbidden {v} from ligne {allowline}")
                         pass
                     pass
 
@@ -396,7 +400,6 @@ def algo5():
             # on est dans un carré
             print(f"algo5> [{colonne},{ligne}]")
             # on scan toutes les cases avec des valeurs autorisées
-            unique = dict()
             for ccolonne in range(1, 4):
                 for cligne in range(1, 4):
                     col = (colonne-1)*3 + ccolonne
@@ -407,24 +410,40 @@ def algo5():
 
                     if selected_case.valeur != 0:
                         continue
-                    if len(selected_case.allowed) == 0:
-                        continue
-
-                    # il y a des valeurs autorisées
-                    # print(f"[{colonne},{ligne}] [{col},{lig}]  {selected_case.allowed}")
-                    for v in selected_case.allowed:
-                        if v not in unique:
-                            unique[v] = list()
-                        unique[v].append((col, lig))
-
-            for v in unique:
-                print(f"    algo5> {v}={unique[v]}")
-
-            # je cherche les valeurs alignées (ligne ou colonne)
-            if len(unique) == 1:
-                print(f"algo5> [{colonne},{ligne}] unique={unique}")
+                    if len(selected_case.allowed) == 1:
+                        selected_case.valeur = selected_case.allowed[0]
+                        selected_case.allowed = None
+                        selected_case.forbidden = None
+                        set_changed(f"algo5> validate {selected_case.valeur} at [{ccolonne},{cligne}]")
 
             pass
+
+
+def algo6():
+    # Ici, on n'a plus d'approche strictement algorithmique
+    # On va donc trouver une situation où
+    # - dans une ligne ou une colonne, il ne reste plus à résoudre que deux cases
+    #   situées à l'intérieur d'un carré (donc 2 chiffres [a, b] ou [b, a])
+    # Pour résoudre cette situation, on commance par sauvegarder la Grille en l'état
+    # Puis on choisi la combinaison [a, b] ce qui valide deux cases arbitrairement
+    # Puis on relance la suite des algos comme précédemment.
+    # Si on aboutit à une contradiction, alors on sait que c'était l'autre combinaison qui
+    # était la bonne. On la valide et on on reprend la suite des algos
+    # On peut aboutir à une non décision lorsque la Grille n'a pas été résolue mais sans contradiction
+    # Alors on doit reprendre l'algo6 récursivement là où on est arrivé
+
+    # sauvegarde de la grille
+
+    # recherche du pattern [ab, ab] sur une ligne ou un colonne d'un carré
+
+    # Choix arbitraire de la combinaison [a, b]
+
+    # Relance de la suite des algos
+
+
+
+    print("Algo6 -----------------------------------------------------------------------")
+
 
 
 match = dict()
@@ -458,15 +477,23 @@ class Animation:
             reset_changed()
             start = action[1]
             action = (f"Boucle {self.loop}", start)
+            print(f"============= Changed {Changed}==================")
         else:
             print(f"============= {self.loop} Step {self.step} action {action[0]} ==================")
             action[1]()
+            print(f"============= Changed {Changed} ==================")
 
-        self.step += 1
-        if self.step > 6:
+        if not Changed:
+            print(f"============= Next step ==================")
+            self.step += 1
+            if self.step > 6:
+                self.step = 1
+                self.loop += 1
+
+                reset_changed()
+        else:
+            print(f"============= Restart steps ==================")
             self.step = 1
-            self.loop += 1
-
             reset_changed()
 
         action = self.match[self.step]
